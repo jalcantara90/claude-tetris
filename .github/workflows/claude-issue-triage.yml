@@ -1,0 +1,73 @@
+name: Claude Issue Triage
+
+on:
+  issues:
+    types: [opened, edited]
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write        # necesario para aplicar labels, crear labels y comentar
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Triage issue with Claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: >-
+            --allowed-tools "Bash(gh issue view:*),Bash(gh issue edit:*),Bash(gh issue comment:*),Bash(gh label list:*),Bash(gh label create:*)"
+          prompt: |
+            Eres el triador automático de issues de este repositorio: un Tetris en
+            JS/HTML/CSS vanilla (archivos clave: game.js, index.html, style.css).
+
+            Analiza el issue #${{ github.event.issue.number }} y actúa de la siguiente manera:
+
+            1. Lee el issue completo y sus comentarios con:
+               gh issue view ${{ github.event.issue.number }} --comments
+
+            2. Consulta los labels disponibles en el repositorio:
+               gh label list
+
+            3. Asigna los labels más apropiados al issue:
+               gh issue edit ${{ github.event.issue.number }} --add-label "<label>"
+               - Prioriza siempre los labels EXISTENTES (bug, enhancement, documentation, question, etc.).
+               - Si ninguno encaja con el problema reportado, crea uno nuevo con nombre coherente
+                 (por ejemplo: area:rendering, area:controls, area:scoring, priority:high) y luego aplícalo:
+                 gh label create "<nombre>" --color <hex-sin-#> --description "<descripción breve>"
+               Puedes aplicar más de un label si es apropiado.
+
+            4. Publica el diagnóstico como comentario en el issue, escribiendo TODO EN ESPAÑOL:
+               gh issue comment ${{ github.event.issue.number }} --body "$(cat <<'DIAGNOSIS'
+               🤖 **Diagnóstico automático de Claude**
+
+               ### 📋 Resumen
+               <qué pide o reporta el issue en 1-2 frases>
+
+               ### 🏷️ Tipo
+               <bug / mejora / documentación / pregunta>
+
+               ### 📁 Componentes afectados
+               <qué archivos del proyecto hay que revisar o modificar: game.js, index.html, style.css>
+
+               ### 🔍 Causa o contexto probable
+               <análisis técnico breve del por qué ocurre el problema o qué falta implementar>
+
+               ### ✅ Pasos sugeridos para la solución
+               1. <paso concreto>
+               2. <paso concreto>
+               3. ...
+               DIAGNOSIS
+               )"
+
+            Reglas importantes:
+            - Sé conciso y técnico; este diagnóstico se usará para implementar la solución en código.
+            - Si el issue ya tiene un comentario previo de diagnóstico tuyo (puede ocurrir en el evento "edited"),
+              publica uno nuevo solo si el contenido del issue cambió de forma sustancial respecto al diagnóstico anterior.
+              Si el cambio es menor (typo, formato), no dupliques el comentario.
